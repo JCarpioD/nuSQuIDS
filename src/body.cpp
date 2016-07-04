@@ -110,11 +110,11 @@ VariableDensity::VariableDensity(std::vector<double> x_input,std::vector<double>
               ye_arr[i] = ye_input[i];
             }
 
-            inter_density = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_density = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_density_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_density,x_arr,density_arr,arraysize);
 
-            inter_ye = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_ye = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_ye_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_ye,x_arr,ye_arr,arraysize);
 
@@ -234,11 +234,11 @@ Earth::Earth(std::string filepath):Body(4,"Earth")
             x_ye_min = earth_ye[0];
             x_ye_max = earth_ye[arraysize-1];
 
-            inter_density = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_density = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_density_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_density,earth_radius,earth_density,arraysize);
 
-            inter_ye = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_ye = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_ye_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_ye,earth_radius,earth_ye,arraysize);
         }
@@ -275,11 +275,11 @@ Sun::Sun():Body(5,"Sun")
                 sun_xh[i] = sun_model[i][6];
             }
 
-            inter_density = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_density = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_density_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_density,sun_radius,sun_density,arraysize);
 
-            inter_rxh = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_rxh = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_rxh_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_rxh,sun_radius,sun_xh,arraysize);
         }
@@ -359,11 +359,11 @@ SunASnu::SunASnu():Body(6,"SunASnu")
                 sun_xh[i] = sun_model[i][6];
             }
 
-            inter_density = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_density = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_density_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_density,sun_radius,sun_density,arraysize);
 
-            inter_rxh = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_rxh = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_rxh_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_rxh,sun_radius,sun_xh,arraysize);
         }
@@ -450,36 +450,15 @@ EarthAtm::EarthAtm():EarthAtm(EARTH_MODEL_LOCATION)
 EarthAtm::Track::Track(double phi_input):Body::Track(0,0)
         {
             radius_nu = 6371.0*param.km;
-            //radius_nu = 6369.0*param.km;
-            //atmheight = 100.0*param.km;
             atmheight = 22.*param.km;
 
-            phi = phi_input;
-            cosphi = cos(phi);
-
-            /*
-            if(cosphi<=0.0){
-                L = 2.0*radius_nu*std::abs(cosphi);
-            } else {
-                L = atmheight/std::abs(cosphi);
-            }
-            */
+            cosphi = cos(phi_input);
+            double sinsqphi = 1-cosphi*cosphi;
 
             double R = radius_nu;
             double r = atmheight;
-            double mm = tan(phi);
 
-/*            if(cosphi<=0.0){
-                L = sqrt(((1.0 + mm*mm)*r*r + 2.0*(1.0 + mm*mm)*r*R + 2.0*R*
-                    (R + sqrt((1.0 + mm*mm)*r*r + 2.0*(1.0 + mm*mm)*
-                    r*R + R*R)))/(1.0 + mm*mm));
-            } else {
-                L = sqrt(((1.0 + mm*mm)*r*r + 2.0*(1.0 + mm*mm)*r*R + 2.0*R*
-                    (R - sqrt((1.0 + mm*mm)*r*r + 2.0*(1.0 + mm*mm)*
-                    r*R + R*R)))/(1.0 + mm*mm));
-            }*/
-
-	    L = sqrt(SQR(R+r)-SQR(R*sin(phi)))-R*cosphi;
+            L = sqrt(SQR(R+r)-R*R*sinsqphi)-R*cosphi;
 
             x = 0.0;
             xini = 0.0;
@@ -493,19 +472,37 @@ EarthAtm::Track::Track(double phi_input):Body::Track(0,0)
                 std::cout << "==" << std::endl;
             #endif
         }
-	
+  
+EarthAtm::Track::Track():
+Body::Track(0,0),radius_nu(6371.0*param.km),atmheight(22.*param.km){}
+  
+EarthAtm::Track
+EarthAtm::Track::makeWithCosine(double cosphi){
+  Track track;
+  
+  track.cosphi = cosphi;
+  double sinsqphi = 1-track.cosphi*track.cosphi;
+  double R = track.radius_nu;
+  
+  track.L = sqrt(SQR(R+track.atmheight)-R*R*sinsqphi)-R*cosphi;
+  track.x = 0.0;
+  track.xini = 0.0;
+  track.xend = track.L;
+  
+  return(track);
+}
+
 void EarthAtm::Track::FillDerivedParams(std::vector<double>& TrackParams) const{
-	TrackParams.push_back(phi);
+	TrackParams.push_back(acos(cosphi));
 }
 
 double EarthAtm::density(const GenericTrack& track_input) const
         {
             const EarthAtm::Track& track_earthatm = static_cast<const EarthAtm::Track&>(track_input);
             double xkm = track_earthatm.GetX()/param.km;
-	    double phi = track_earthatm.phi;
-	    double dL = sqrt(SQR(radius+atm_height)-SQR(radius*sin(phi)))+radius*cos(phi);
+            double sinsqphi = 1-track_earthatm.cosphi*track_earthatm.cosphi;
+            double dL = sqrt(SQR(radius+atm_height)-radius*radius*sinsqphi)+radius*track_earthatm.cosphi;
 
-//            double r = sqrt(SQR(earth_with_atm_radius) + SQR(xkm) - (track_earthatm.L/param.km)*xkm);
             double r = sqrt(SQR(earth_with_atm_radius) + SQR(xkm) - (track_earthatm.L/param.km+dL)*xkm);
 
             #ifdef EarthAtm_DEBUG
@@ -534,9 +531,8 @@ double EarthAtm::ye(const GenericTrack& track_input) const
         {
             const EarthAtm::Track& track_earthatm = static_cast<const EarthAtm::Track&>(track_input);
             double xkm = track_earthatm.GetX()/param.km;
-	    double phi = track_earthatm.phi;
-	    double dL = sqrt(SQR(radius+atm_height)-SQR(radius*sin(phi)))+radius*cos(phi);
-//            double r = sqrt(SQR(earth_with_atm_radius) + SQR(xkm) - (track_earthatm.L/param.km)*xkm);
+            double sinsqphi = 1-track_earthatm.cosphi*track_earthatm.cosphi;
+            double dL = sqrt(SQR(radius+atm_height)-radius*radius*sinsqphi)+radius*track_earthatm.cosphi;
             double r = sqrt(SQR(earth_with_atm_radius) + SQR(xkm) - (track_earthatm.L/param.km+dL)*xkm);
 
             double rel_r = r/earth_with_atm_radius;
@@ -579,11 +575,11 @@ EarthAtm::EarthAtm(std::string filepath):Body(7,"EarthAtm")
             x_ye_min = earth_ye[0];
             x_ye_max = earth_ye[arraysize-1];
 
-            inter_density = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_density = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_density_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_density,earth_radius,earth_density,arraysize);
 
-            inter_ye = gsl_spline_alloc(gsl_interp_cspline,arraysize);
+            inter_ye = gsl_spline_alloc(gsl_interp_akima,arraysize);
             inter_ye_accel = gsl_interp_accel_alloc ();
             gsl_spline_init (inter_ye,earth_radius,earth_ye,arraysize);
         }

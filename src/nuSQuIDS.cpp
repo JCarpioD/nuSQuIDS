@@ -43,6 +43,9 @@ void nuSQUIDS::init(double xini){
 
   if ( numneu > SQUIDS_MAX_HILBERT_DIM )
     throw std::runtime_error("nuSQUIDS::Error::Maximum number of neutrinos exceded");
+  if ( numneu < 3)
+    throw std::runtime_error("nuSQUIDS::Error::Minimum number of neutrinos is three");
+
   nsun = numneu;
 
   //initialize SQUIDS
@@ -126,6 +129,9 @@ void nuSQUIDS::init(marray<double,1> E_vector, double xini){
 
   if ( numneu > SQUIDS_MAX_HILBERT_DIM )
     throw std::runtime_error("nuSQUIDS::Error::Maximum number of neutrinos exceded");
+  if ( numneu < 3)
+    throw std::runtime_error("nuSQUIDS::Error::Minimum number of neutrinos is three");
+
   nsun = numneu;
 
   ne = E_vector.size();
@@ -1326,18 +1332,6 @@ void nuSQUIDS::SetIniFlavorProyectors(){
   }
 }
 
-const squids::SU_vector& nuSQUIDS::GetState(unsigned int ie, unsigned int rho) const{
-  return state[ie].rho[rho];
-}
-
-const squids::SU_vector& nuSQUIDS::GetFlavorProj(unsigned int flv,unsigned int rho) const{
-  return b1_proj[rho][flv];
-}
-
-const squids::SU_vector& nuSQUIDS::GetMassProj(unsigned int flv,unsigned int rho) const{
-  return b0_proj[flv];
-}
-
 squids::SU_vector nuSQUIDS::GetHamiltonian(unsigned int ei, unsigned int rho){
   if (!ienergy)
     throw std::runtime_error("nuSQUIDS::Error::Energy not initialized");
@@ -1345,7 +1339,7 @@ squids::SU_vector nuSQUIDS::GetHamiltonian(unsigned int ei, unsigned int rho){
   return H0(E_range[ei],rho)+HI(ei,rho,Get_t());
 }
 
-void nuSQUIDS::WriteStateHDF5(std::string str,std::string grp,bool save_cross_section, std::string cross_section_grp_loc) const{
+void nuSQUIDS::WriteStateHDF5(std::string str,std::string grp,bool save_cross_section, std::string cross_section_grp_loc, bool overwrite) const{
   if ( body == NULL )
     throw std::runtime_error("nuSQUIDS::Error::BODY is a NULL pointer");
   if (not ibody )
@@ -1371,7 +1365,10 @@ void nuSQUIDS::WriteStateHDF5(std::string str,std::string grp,bool save_cross_se
   //std::cout << "writing to hdf5 file" << std::endl;
   // H5F_ACC_TRUNC : overwrittes file
   // H5F_ACC_EXCL  : files if file exists
-  file_id = H5Fopen(str.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+  if(overwrite)
+    file_id = H5Fopen(str.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT);
+  else
+    file_id = H5Fopen(str.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
   if (file_id < 0 ) {// file already exists
     file_id = H5Fcreate(str.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
     if (file_id < 0)
@@ -2208,11 +2205,11 @@ void nuSQUIDS::Set_IncludeOscillations(bool opt){
   ioscillations = opt;
 }
 
-std::shared_ptr<Track> nuSQUIDS::GetTrack() const{
+std::shared_ptr<Track> nuSQUIDS::GetTrack(){
   return track;
 }
 
-std::shared_ptr<Body> nuSQUIDS::GetBody() const{
+std::shared_ptr<Body> nuSQUIDS::GetBody(){
   return body;
 }
 

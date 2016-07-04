@@ -28,7 +28,7 @@ function find_package(){
 		MIN_VERSION=$2
 		pkg-config --atleast-version $MIN_VERSION $PKG
 		if [ "$?" -ne 0 ]; then
-			echo "Error: installed $PKG verson ("`pkg-config --modversion $PKG`") is too old; version >=$MIN_VERSION is required" 1>&2
+			echo "Error: installed $PKG version ("`pkg-config --modversion $PKG`") is too old; version >=$MIN_VERSION is required" 1>&2
 			exit 1
 		fi
 	fi
@@ -59,19 +59,22 @@ function find_hdf5(){
 	HDF5_COMPILE_COMMAND=`h5cc -show`
 	POSSIBLE_HDF5_LIBDIRS=`echo "$HDF5_COMPILE_COMMAND" | sed 's| |\n|g' | sed -n 's/.*-L\([^ ]*\).*/\1/p'`
 	for HDF5_LIBDIR in $POSSIBLE_HDF5_LIBDIRS; do
-		if [ -d $HDF5_LIBDIR -a -f $HDF5_LIBDIR/libhdf5.a ]; then
+		if [ -d $HDF5_LIBDIR -a \( -f $HDF5_LIBDIR/libhdf5.a -o -f $HDF5_LIBDIR/libhdf5.so \) ]; then
 			break
 		fi
 	done
-	if [ ! -d $HDF5_LIBDIR -o ! -f $HDF5_LIBDIR/libhdf5.a ]; then
+	if [ ! -d $HDF5_LIBDIR -o ! \( -f $HDF5_LIBDIR/libhdf5.a -o -f $HDF5_LIBDIR/libhdf5.so \) ]; then
 		echo " Unable to guess $PKG library directory"
 		return
 	fi
 	# This is an educated guess. . .
 	HDF5_INCDIR="${HDF5_LIBDIR}/../include"
 	if [ ! -d $HDF5_INCDIR -o ! -f $HDF5_INCDIR/H5version.h ]; then
+	    HDF5_INCDIR="${HDF5_LIBDIR}/../../include"
+	    if [ ! -d $HDF5_INCDIR -o ! -f $HDF5_INCDIR/H5version.h ]; then
 		echo " Unable to guess $PKG include directory"
 		return
+	    fi
 	fi
 	HDF5_CFLAGS="-I${HDF5_INCDIR}"
 	HDF5_LDFLAGS=`echo "$HDF5_COMPILE_COMMAND" | \
@@ -266,6 +269,9 @@ if [ "$SQUIDS_INCDIR" -a "$SQUIDS_LIBDIR" ]; then
 		SQUIDS_FOUND=1
 		SQUIDS_CFLAGS="-I$SQUIDS_INCDIR"
 		SQUIDS_LDFLAGS="-L$SQUIDS_LIBDIR -lSQuIDS"
+		if $CXX --version | grep -q "Free Software Foundation"; then
+			SQUIDS_CFLAGS="$SQUIDS_CFLAGS -Wno-abi"
+		fi
 	else
 		echo "Warning: manually specifed SQUIDS not found; will attempt auto detection"
 	fi
@@ -297,7 +303,7 @@ echo '
 Name: HDF5
 Description: "A data model, library, and file format for storing and managing data."
 URL: https://www.hdfgroup.org/HDF5/' >> lib/hdf5.pc
-echo "Version: $HDF5_VERSION" >> lib/hdf5.pc
+echo "Version: ${HDF5_VERSION}" >> lib/hdf5.pc
 echo "Cflags: ${HDF5_CFLAGS}
 Libs: ${HDF5_LDFLAGS}
 " >> lib/hdf5.pc
@@ -348,7 +354,9 @@ EXAMPLES := examples/Single_energy/single_energy \
             examples/Bodies/bodies \
             examples/Xsections/xsections \
             examples/NSI/nsi \
-            examples/Atm_NSI/atm_nsi
+            examples/Atm_NSI/atm_nsi \
+            examples/HDF5_Write_Read/write \
+            examples/HDF5_Write_Read/read 
 
 CXXFLAGS= -std=c++11
 
@@ -405,8 +413,16 @@ examples/Multiple_energy/multiple_energy : $(DYN_PRODUCT) examples/Multiple_ener
 	@echo Compiling multiple energy example
 	@$(CXX) $(EXMAPLES_FLAGS) examples/Multiple_energy/main.cpp -lnuSQuIDS $(LDFLAGS) -o $@
 
+examples/HDF5_Write_Read/write : $(DYN_PRODUCT) examples/HDF5_Write_Read/write.cpp
+	@echo Compiling HDF5 write
+	@$(CXX) $(EXMAPLES_FLAGS) examples/HDF5_Write_Read/write.cpp -lnuSQuIDS $(LDFLAGS) -o $@
+
+examples/HDF5_Write_Read/read : $(DYN_PRODUCT) examples/HDF5_Write_Read/read.cpp
+	@echo Compiling HDF5 read
+	@$(CXX) $(EXMAPLES_FLAGS) examples/HDF5_Write_Read/read.cpp -lnuSQuIDS $(LDFLAGS) -o $@
+
 examples/Atm_default/atm_default : $(DYN_PRODUCT) examples/Atm_default/main.cpp
-	@echo Compiling atmospheric example
+	@echo Compiling atmospheric exampe
 	@$(CXX) $(EXMAPLES_FLAGS) examples/Atm_default/main.cpp -lnuSQuIDS $(LDFLAGS) -o $@
 
 build/exBody.o : examples/Bodies/exBody.h examples/Bodies/exBody.cpp
@@ -417,7 +433,7 @@ build/ex_bodies_main.o : examples/Bodies/exBody.h examples/Bodies/main.cpp
 
 examples/Bodies/bodies : $(DYN_PRODUCT) build/ex_bodies_main.o build/exBody.o
 	@echo Compiling bodies example
-	$(CXX) $(EXMAPLES_FLAGS) build/ex_bodies_main.o build/exBody.o -lnuSQuIDS $(LDFLAGS) -o $@
+	@$(CXX) $(EXMAPLES_FLAGS) build/ex_bodies_main.o build/exBody.o -lnuSQuIDS $(LDFLAGS) -o $@
 
 build/exCross.o : examples/Xsections/exCross.h examples/Xsections/exCross.cpp
 	@$(CXX) $(EXMAPLES_FLAGS) -c examples/Xsections/exCross.cpp -o $@
